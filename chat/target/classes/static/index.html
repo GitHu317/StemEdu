@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+    
+    <!-- External Libraries for WebSocket -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.2/dist/sockjs.min.js"></script>
+
+    <!-- Link to External CSS Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Real-time Chat Application</h1>
+        </div>
+
+        <div id="chat-box" class="chat-box">
+            <!-- Messages will be displayed here -->
+        </div>
+
+        <div class="message-input-container">
+            <input type="text" id="username" class="input-field" placeholder="Enter your username" />
+            <textarea id="message" class="input-field" placeholder="Type a message"></textarea>
+            <button id="send" class="send-button" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // Check if a username is saved in localStorage
+        const savedUsername = localStorage.getItem('username');
+        if (savedUsername) {
+            document.getElementById('username').value = savedUsername;
+            updateAvatar(savedUsername);  // Set avatar on load
+        }
+
+        // Establish WebSocket connection
+        var socket = new SockJS('/chat'); // Connect to "/chat" endpoint
+        var stompClient = Stomp.over(socket);
+
+        // Connect to the WebSocket server
+        stompClient.connect({}, function (frame) {
+            console.log('Connected: ' + frame);
+
+            // Subscribe to the /topic/messages destination to receive messages
+            stompClient.subscribe('/topic/messages', function (messageOutput) {
+                showMessage(JSON.parse(messageOutput.body));
+            });
+        });
+
+        // Function to display the chat message
+        function showMessage(message) {
+            const chatBox = document.getElementById("chat-box");
+            const messageDiv = document.createElement("div");
+            messageDiv.classList.add('message');
+
+            // Create the avatar element
+            const avatar = createAvatar(message.username);
+
+            // Display message with the username and avatar
+            const messageContent = document.createElement("span");
+            messageContent.textContent = `${message.username}: ${message.content}`;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(messageContent);
+            chatBox.appendChild(messageDiv);
+
+            // Auto scroll to the bottom for new messages
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Send the message when user clicks the 'Send' button
+        function sendMessage() {
+            const username = document.getElementById("username").value;
+            const message = document.getElementById("message").value;
+
+            if (username && message) {
+                // Save the username to localStorage if it's a valid one
+                localStorage.setItem('username', username);
+                updateAvatar(username);  // Update avatar on send
+
+                const messageObject = {
+                    username: username,
+                    content: message
+                };
+
+                // Send the message to the server via WebSocket
+                stompClient.send("/app/chat", {}, JSON.stringify(messageObject));
+                document.getElementById("message").value = ''; // Clear the message box
+            }
+        }
+
+        // Update all previous messages with the new username when it changes
+        document.getElementById("username").addEventListener('input', function () {
+            const newUsername = document.getElementById("username").value;
+            localStorage.setItem('username', newUsername);
+
+            // Update the avatar for the new username
+            updateAvatar(newUsername);
+
+            // Update all chat messages with the new username
+            const messages = document.querySelectorAll('.message');
+            messages.forEach(function (messageDiv) {
+                const currentText = messageDiv.querySelector('span').textContent;
+                const originalUsername = currentText.split(':')[0];
+                if (originalUsername === savedUsername) {
+                    messageDiv.querySelector('span').textContent = currentText.replace(savedUsername, newUsername);
+                    const newAvatar = createAvatar(newUsername);
+                    messageDiv.querySelector('.avatar').replaceWith(newAvatar);
+                }
+            });
+        });
+
+        // Function to create a dynamic avatar based on the first letter of the username
+        function createAvatar(username) {
+            const avatar = document.createElement("div");
+            avatar.classList.add("avatar");
+
+            // Use the first letter of the username
+            avatar.textContent = username.charAt(0).toUpperCase();
+
+            // Assign a background color based on the first letter of the username
+            const color = generateAvatarColor(username);
+            avatar.style.backgroundColor = color;
+
+            return avatar;
+        }
+
+        // Function to generate a background color for the avatar based on the username
+        function generateAvatarColor(username) {
+            // Generate a hash code from the username to create a unique color
+            let hash = 0;
+            for (let i = 0; i < username.length; i++) {
+                hash = username.charCodeAt(i) + ((hash << 5) - hash);
+            }
+
+            // Convert the hash to a hex color code
+            let color = '#';
+            for (let i = 0; i < 3; i++) {
+                color += ('00' + (hash >> (i * 8) & 0xFF).toString(16)).slice(-2);
+            }
+            return color;
+        }
+
+        // Function to update the avatar when the username changes
+        function updateAvatar(username) {
+            const avatar = createAvatar(username);
+            const avatarContainer = document.querySelector(".avatar-container");
+            if (avatarContainer) {
+                avatarContainer.innerHTML = ''; // Remove the old avatar
+                avatarContainer.appendChild(avatar); // Append the new avatar
+            }
+        }
+    </script>
+
+</body>
+</html>
